@@ -1,0 +1,47 @@
+.story-memory h4 {
+    margin: 0.5em 0 0.25em;
+}
+
+.story-memory-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 5px;
+    margin-top: 5px;
+}
+
+.story-memory-status {
+    font-size: 0.85em;
+    opacity: 0.8;
+    margin: 3px 0 5px;
+    white-space: pre-line;
+}
+
+.story-memory-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.story-memory-buttons .menu_button {
+    margin: 0;
+}
+
+.story-memory-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.story-memory-warning {
+    font-size: 0.85em;
+    padding: 5px;
+    margin: 5px 0;
+    border: 1px solid var(--warning, orange);
+    border-radius: 5px;
+}
+
+.story-memory .menu_button.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}

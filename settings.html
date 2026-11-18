@@ -1,0 +1,114 @@
+<div id="story_memory_settings" class="story-memory">
+    <div class="inline-drawer">
+        <div class="inline-drawer-toggle inline-drawer-header">
+            <b>Story Memory</b>
+            <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+        </div>
+        <div class="inline-drawer-content">
+            <label class="checkbox_label" for="story_memory_enabled">
+                <input id="story_memory_enabled" type="checkbox" data-sm-setting="enabled" />
+                <span>Enabled (inject summary, auto-update, trim context)</span>
+            </label>
+
+            <div id="story_memory_builtin_warning" class="story-memory-warning" style="display: none;">
+                The built-in <b>Summarize</b> extension is also enabled and injects its own summary. Disable it in <i>Manage extensions</i> to avoid duplicate summaries.
+            </div>
+
+            <label for="story_memory_profile">Summarize with connection profile</label>
+            <select id="story_memory_profile" class="text_pole"></select>
+
+            <div class="story-memory-header">
+                <span>Current summary</span>
+                <i class="editor_maximize fa-solid fa-maximize right_menu_button" data-for="story_memory_text" title="Expand the editor"></i>
+            </div>
+            <textarea id="story_memory_text" class="text_pole textarea_compact" rows="8" placeholder="No summary yet. Click 'Summarize now', or paste a summary from a previous chat."></textarea>
+            <div id="story_memory_status" class="story-memory-status"></div>
+
+            <div class="story-memory-buttons">
+                <div id="story_memory_summarize" class="menu_button menu_button_icon" title="Summarize every message not yet covered by the summary (in batches).">
+                    <i class="fa-solid fa-feather"></i>
+                    <span>Summarize now</span>
+                </div>
+                <div id="story_memory_undo" class="menu_button menu_button_icon" title="Remove the latest summary update and fall back to the previous one. Saved to the chat file immediately.">
+                    <i class="fa-solid fa-rotate-left"></i>
+                    <span>Undo last update</span>
+                </div>
+                <div id="story_memory_new_chat" class="menu_button menu_button_icon" title="Start a new chat with this character/group that continues from the current summary.">
+                    <i class="fa-solid fa-file-circle-plus"></i>
+                    <span>New chat from summary</span>
+                </div>
+                <div id="story_memory_import" class="menu_button menu_button_icon" title="Take the summary stored by the built-in Summarize extension in this chat and use it as this chat's starting summary. All messages of this chat will count as not yet summarized.">
+                    <i class="fa-solid fa-file-import"></i>
+                    <span>Import built-in summary</span>
+                </div>
+            </div>
+
+            <hr>
+            <h4>Context</h4>
+            <label for="story_memory_keep_messages">Messages sent to the LLM (0 = no limit)</label>
+            <input id="story_memory_keep_messages" type="number" class="text_pole" min="0" max="10000" step="1" data-sm-setting="keepMessages" />
+            <label class="checkbox_label" for="story_memory_only_hide_summarized">
+                <input id="story_memory_only_hide_summarized" type="checkbox" data-sm-setting="onlyHideSummarized" />
+                <span>Only leave out messages that are already in the summary</span>
+            </label>
+
+            <hr>
+            <h4>Summarization</h4>
+            <label for="story_memory_auto_interval">Auto-summarize after N unsummarized messages (0 = manual only)</label>
+            <input id="story_memory_auto_interval" type="number" class="text_pole" min="0" max="1000" step="1" data-sm-setting="autoInterval" />
+
+            <label for="story_memory_max_messages">Max messages per summary request (0 = no limit)</label>
+            <input id="story_memory_max_messages" type="number" class="text_pole" min="0" max="1000" step="1" data-sm-setting="maxMessagesPerRequest" />
+
+            <label for="story_memory_budget">Summary request token budget (0 = main API context minus response length)</label>
+            <input id="story_memory_budget" type="number" class="text_pole" min="0" max="2000000" step="256" data-sm-setting="contextBudget" />
+
+            <label for="story_memory_response_length">Summary response length (tokens, includes reasoning)</label>
+            <input id="story_memory_response_length" type="number" class="text_pole" min="16" max="65536" step="16" data-sm-setting="responseLength" />
+
+            <label for="story_memory_words">Target summary length (words, fills &#123;&#123;words&#125;&#125;)</label>
+            <input id="story_memory_words" type="number" class="text_pole" min="25" max="10000" step="25" data-sm-setting="words" />
+
+            <label class="checkbox_label" for="story_memory_block_sending">
+                <input id="story_memory_block_sending" type="checkbox" data-sm-setting="blockSending" />
+                <span>Block sending while summarizing</span>
+            </label>
+
+            <div class="story-memory-header">
+                <label for="story_memory_prompt">Summary prompt</label>
+                <div id="story_memory_prompt_restore" class="menu_button menu_button_icon" title="Restore default prompt">
+                    <i class="fa-solid fa-clock-rotate-left"></i>
+                </div>
+            </div>
+            <textarea id="story_memory_prompt" class="text_pole textarea_compact" rows="8" data-sm-setting="prompt"></textarea>
+
+            <hr>
+            <h4>Injection</h4>
+            <label for="story_memory_template">Injection template (&#123;&#123;summary&#125;&#125; = summary text)</label>
+            <textarea id="story_memory_template" class="text_pole textarea_compact" rows="2" data-sm-setting="template"></textarea>
+
+            <label for="story_memory_position">Position</label>
+            <select id="story_memory_position" class="text_pole" data-sm-setting="position" data-sm-type="number">
+                <option value="2">Before main prompt / story string</option>
+                <option value="0">After main prompt / story string</option>
+                <option value="1">In-chat at depth</option>
+            </select>
+
+            <div class="story-memory-row">
+                <label for="story_memory_depth">Depth</label>
+                <input id="story_memory_depth" type="number" class="text_pole" min="0" max="9999" step="1" data-sm-setting="depth" />
+                <label for="story_memory_role">Role</label>
+                <select id="story_memory_role" class="text_pole" data-sm-setting="role" data-sm-type="number">
+                    <option value="0">System</option>
+                    <option value="1">User</option>
+                    <option value="2">Assistant</option>
+                </select>
+            </div>
+
+            <label class="checkbox_label" for="story_memory_scan">
+                <input id="story_memory_scan" type="checkbox" data-sm-setting="scan" />
+                <span>Include summary in World Info scanning</span>
+            </label>
+        </div>
+    </div>
+</div>
