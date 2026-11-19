@@ -7,7 +7,6 @@ import {
     extension_prompt_roles,
     extension_prompt_types,
     generateRaw,
-    getMaxPromptTokens,
     isGenerating,
     saveSettingsDebounced,
     setExtensionPrompt,
@@ -38,14 +37,34 @@ Merge the existing summary (if one is given) with the new messages into ONE upda
 - Limit the summary to about {{words}} words.
 Respond with the updated summary only, without any preamble or commentary.`;
 
+const defaultAppendPrompt = `You are keeping a running record of an ongoing story between {{user}} and {{char}}.
+The existing summary (if one is given) is read-only context: do NOT repeat, rewrite, shorten or correct it.
+Write only the continuation that covers the new messages; it will be appended directly after the existing summary.
+- Keep every important fact: characters, relationships, locations, items, promises, secrets, open plot threads and the current situation.
+- Write in past tense, third person, plain prose.
+- Limit the new part to about {{words}} words.
+Respond with the new part only, without any preamble or commentary.`;
+
+const modes = Object.freeze({
+    /** The summarizer returns a full summary that replaces the previous one. */
+    REWRITE: 'rewrite',
+    /** The summarizer only sees the previous summary and its output is appended to it. */
+    APPEND: 'append',
+});
+
+const SETTINGS_VERSION = 2;
+
 const defaultSettings = Object.freeze({
+    settingsVersion: SETTINGS_VERSION,
     enabled: true,
     profileId: '',
+    mode: modes.REWRITE,
     prompt: defaultPrompt,
+    appendPrompt: defaultAppendPrompt,
     words: 400,
     responseLength: 2048,
     autoInterval: 20,
-    maxMessagesPerRequest: 40,
+    maxMessagesPerRequest: 0,
     contextBudget: 0,
     blockSending: true,
     template: '[Story so far:\n{{summary}}]',
@@ -56,6 +75,19 @@ const defaultSettings = Object.freeze({
     keepMessages: 0,
     onlyHideSummarized: true,
 });
+
+/**
+ * Loads saved settings over the defaults and upgrades values saved by older versions.
+ */
+function loadSettings() {
+    const saved = extension_settings[MODULE] ?? {};
+    const s = { ...defaultSettings, ...saved, settingsVersion: SETTINGS_VERSION };
+    if (!(saved.settingsVersion >= 2) && saved.maxMessagesPerRequest === 40) {
+        // v1 split summaries into 40-message requests by default; v2 sends every pending message at once.
+        s.maxMessagesPerRequest = 0;
+    }
+    extension_settings[MODULE] = s;
+}
 
 let busy = false;
 let stopRequested = false;
@@ -109,9 +141,11 @@ function getPendingIndices(includeLast) {
     return pending;
 }
 
+/**
+ * @returns {number} Token limit for one summary request, or 0 for no limit
+ */
 function getSummaryBudget() {
-    const s = settings();
-    return s.contextBudget > 0 ? s.contextBudget : getMaxPromptTokens(s.responseLength);
+    return Math.max(0, settings().contextBudget || 0);
 }
 
 function applyInjection() {
@@ -161,24 +195,27 @@ async function summarizeBatch(pending, chatId) {
     const s = settings();
     const { chat } = getContext();
     const previous = getState().summary.trim();
-    const systemPrompt = substituteParamsExtended(s.prompt, { words: s.words });
+    const append = s.mode === modes.APPEND;
+    const systemPrompt = substituteParamsExtended(append ? s.appendPrompt : s.prompt, { words: s.words });
     const header = previous
-        ? `[Current summary]\n${previous}\n\n[New messages]\n`
+        ? `[${append ? 'Existing summary (read-only)' : 'Current summary'}]\n${previous}\n\n[New messages]\n`
         : '[Messages]\n';
     const budget = getSummaryBudget();
     const PADDING = 64;
-    let used = await getTokenCountAsync(`${systemPrompt}\n${header}`, PADDING);
+    let used = budget > 0 ? await getTokenCountAsync(`${systemPrompt}\n${header}`, PADDING) : 0;
     const lines = [];
     let lastIndex = -1;
 
     for (const i of pending) {
         const message = chat[i];
         const line = `${message.name}: ${message.mes}`;
-        const tokens = await getTokenCountAsync(`${line}\n\n`);
-        if (used + tokens > budget) {
-            break;
+        if (budget > 0) {
+            const tokens = await getTokenCountAsync(`${line}\n\n`);
+            if (used + tokens > budget) {
+                break;
+            }
+            used += tokens;
         }
-        used += tokens;
         lines.push(line);
         lastIndex = i;
         if (s.maxMessagesPerRequest > 0 && lines.length >= s.maxMessagesPerRequest) {
@@ -187,14 +224,15 @@ async function summarizeBatch(pending, chatId) {
     }
 
     if (!lines.length) {
-        throw new Error(`Message #${pending[0]} does not fit: prompt + current summary use ~${used} of ${budget} budget tokens. Raise "Summary request token budget" or shorten the summary.`);
+        throw new Error(`Message #${pending[0]} does not fit: prompt + current summary use ~${used} of ${budget} budget tokens. Raise "Summary request token budget" (0 = no limit) or shorten the summary.`);
     }
 
     const target = chat[lastIndex];
-    const summary = await requestSummary(systemPrompt, header + lines.join('\n\n'));
-    if (!summary) {
+    const result = await requestSummary(systemPrompt, header + lines.join('\n\n'));
+    if (!result) {
         throw new Error('The summarizer returned an empty response.');
     }
+    const summary = append && previous ? `${previous}\n\n${result}` : result;
 
     const context = getContext();
     if (context.getCurrentChatId() !== chatId || context.chat[lastIndex] !== target) {
@@ -507,6 +545,9 @@ function refresh(force = false) {
     renderStatus();
     renderButtons();
     $('#story_memory_builtin_warning').toggle(!extension_settings.disabledExtensions.includes('memory'));
+    const append = settings().mode === modes.APPEND;
+    $('#story_memory_prompt_block').toggle(!append);
+    $('#story_memory_append_prompt_block').toggle(append);
 }
 
 function populateProfiles() {
@@ -566,6 +607,9 @@ function bindSettings() {
     $('#story_memory_prompt_restore').on('click', () => {
         $('#story_memory_prompt').val(defaultPrompt).trigger('input');
     });
+    $('#story_memory_append_prompt_restore').on('click', () => {
+        $('#story_memory_append_prompt').val(defaultAppendPrompt).trigger('input');
+    });
     $('#story_memory_text').on('input', onSummaryInput);
     $('#story_memory_summarize').on('click', onSummarizeClick);
     $('#story_memory_undo').on('click', onUndoClick);
@@ -574,7 +618,7 @@ function bindSettings() {
 }
 
 jQuery(async () => {
-    extension_settings[MODULE] = { ...defaultSettings, ...extension_settings[MODULE] };
+    loadSettings();
 
     const html = await renderExtensionTemplateAsync(EXTENSION_PATH, 'settings');
     $('#extensions_settings2').append(html);
